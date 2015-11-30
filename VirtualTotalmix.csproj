@@ -47,6 +47,7 @@
     <Compile Include="MidiOutput.cs" />
     <Compile Include="MidiInput.cs" />
     <Compile Include="MidiProtocol.cs" />
+    <Compile Include="NanoKontrol2.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="teVirtualMIDI.cs" />
     <Compile Include="Win32Midi.cs" />

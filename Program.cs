@@ -29,14 +29,9 @@ namespace VirtualTotalmix {
             }
             Console.WriteLine("Virtual TotalMix device active");
 
-            var deviceName = "nanokontrol2";
-
-            using (Input  = MidiInputDevice.OpenByName(deviceName))
-            using (Output = MidiOutputDevice.OpenByName(deviceName))
+            using (var nk2 = new NanoKontrol2())
             try {
-                Console.WriteLine("Opened midi input device {0}", Input.Name);
-                Console.WriteLine("Opened midi output device {0}", Output.Name);
-                Input.OnData += Input_OnData;
+                nk2.OnChanged += Nk2_OnChanged;
 
                 Application.Run();
             } finally {
@@ -45,43 +40,8 @@ namespace VirtualTotalmix {
             }
         }
 
-        /*
-        private static async void Animate () {
-            await Task.Delay(500);
-
-            const int min = 32;
-            const int max = 71;
-            const int c = (max - min) + 1;
-
-            int i = 0;
-            while (true) {
-                var prev = min + ((i - 2) % c);
-                var curr = min + (i % c);
-
-                Output.WriteShort(MidiStatusByte.ControlChange, (byte)prev, 0x00);
-                Output.WriteShort(MidiStatusByte.ControlChange, (byte)curr, 0x7F);
-
-                i += 1;
-
-                await Task.Delay(40);
-            }
-        }
-        */
-
-        private static void Input_OnData (object sender, byte[] e) {
-            var bytes = new ArraySegment<byte>(e);
-            ArraySegment<byte> extraBytes;
-
-            MidiMessage msg;
-            if (MidiProtocol.TryParseMessage(bytes, out msg, out extraBytes)) {
-                Console.WriteLine("Input {0}", msg);
-                return;
-            }
-
-            Console.Write("Input {");
-            foreach (var b in e)
-                Console.Write("{0:X2}", b);
-            Console.WriteLine("}");
+        private static void Nk2_OnChanged (object sender, NanoKontrol2.ControlEventArgs e) {
+            Console.WriteLine("NK2 {0}[{1}] = {2}", sender, e.Index, e.NewValue);
         }
 
         private static void Vm_OnData (object sender, byte[] e) {
