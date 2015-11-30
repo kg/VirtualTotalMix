@@ -7,6 +7,27 @@ using System.Threading;
 using System.Threading.Tasks;
 
 public class MidiInputDevice : IDisposable {
+    public struct Info {
+        public readonly uint   Index;
+        public readonly string Name;
+
+        internal Info (uint index) {
+            Win32Midi.MIDIINCAPS caps;
+            Win32Midi.midiInGetDevCaps(new UIntPtr(index), out caps);
+            Index = index;
+            Name = caps.szPname;
+        }
+
+        public MidiInputDevice Open () {
+            return new MidiInputDevice(Index);
+        }
+
+        public override string ToString () {
+            return string.Format("#{0} '{1}'", Index, Name);
+        }
+    }
+
+    public readonly string Name;
     public readonly Win32Midi.HMIDIIN Handle;
 
     public event EventHandler<byte[]> OnData;
@@ -16,6 +37,9 @@ public class MidiInputDevice : IDisposable {
     private bool IsDisposed;
 
     public MidiInputDevice (uint deviceIndex) {
+        var info = new Info(deviceIndex);
+        Name = info.Name;
+
         SynchronizationContext = SynchronizationContext.Current;
         if (SynchronizationContext == null)
             throw new InvalidOperationException("No synchronization context");
@@ -26,6 +50,19 @@ public class MidiInputDevice : IDisposable {
             throw new Exception("Opening midi input device failed with " + openResult.ToString());
 
         Win32Midi.midiInStart(Handle);
+    }
+
+    public static MidiInputDevice OpenByName (string name) {
+        return Devices.Where(d => String.Equals(d.Name, name, StringComparison.InvariantCultureIgnoreCase)).First().Open();
+    }
+
+    public static IEnumerable<Info> Devices {
+        get {
+            uint numDevices = Win32Midi.midiInGetNumDevs();
+
+            for (uint i = 0; i < numDevices; i++)
+                yield return new Info(i);
+        }
     }
        
     private void _InvokeEventHandler (object state) {
@@ -71,6 +108,7 @@ public class MidiInputDevice : IDisposable {
                 return;
 
             IsDisposed = true;
+            Win32Midi.midiInStop(Handle);
             Win32Midi.midiInClose(Handle);
         }
     }

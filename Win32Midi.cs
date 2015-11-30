@@ -222,12 +222,18 @@ public static class Win32Midi {
 
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct MIDIHDR {
-      public byte *    lpData;
-      public UInt32    dwBufferLength;
-      public UInt32    dwBytesRecorded;
-      public UIntPtr   dwUser;
-      public UInt32    dwFlags;
-      public MIDIHDR * lpNext;
+        public byte *    lpData;
+        public UInt32    dwBufferLength;
+        public UInt32    dwBytesRecorded;
+        public UIntPtr   dwUser;
+        public UInt32    dwFlags;
+        public MIDIHDR * lpNext;
+        public UIntPtr   reserved;
+        public UInt32    dwOffset;
+        public UIntPtr   reserved2;
+        public UIntPtr   reserved3;
+        public UIntPtr   reserved4;
+        public UIntPtr   reserved5;
     }
 
     #endregion
@@ -261,19 +267,6 @@ public static class Win32Midi {
         UIntPtr dwParam1, UIntPtr dwParam2);
 
     /// <summary>
-    /// Opens a MIDI output device.
-    /// </summary>
-    /// NOTE: This is adapted from the original Win32 function in order to make it typesafe.
-    ///
-    /// Win32 docs: http://msdn.microsoft.com/en-us/library/ms711632(VS.85).aspx
-    public static MMRESULT midiOutOpen(out HMIDIOUT lphmo, UIntPtr uDeviceID,
-                                        MidiOutProc dwCallback, UIntPtr dwCallbackInstance)
-    {
-        return midiOutOpen(out lphmo, uDeviceID, dwCallback, dwCallbackInstance,
-            dwCallback == null ? MidiOpenFlags.CALLBACK_NULL : MidiOpenFlags.CALLBACK_FUNCTION);
-    }
-
-    /// <summary>
     /// Turns off all notes and sustains on a MIDI output device.
     /// </summary>
     /// Win32 docs: http://msdn.microsoft.com/en-us/library/dd798479(VS.85).aspx
@@ -293,6 +286,12 @@ public static class Win32Midi {
     /// Win32 docs: http://msdn.microsoft.com/en-us/library/ms711640(VS.85).aspx
     [DllImport("winmm.dll", SetLastError = true)]
     public static extern MMRESULT midiOutShortMsg(HMIDIOUT hmo, UInt32 dwMsg);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    public static extern MMRESULT midiOutPrepareHeader(HMIDIOUT hmo, ref MIDIHDR lpMidiOutHdr, uint cbMidiOutHdr);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    public static extern MMRESULT midiOutLongMsg(HMIDIOUT hmo, ref MIDIHDR lpMidiOutHdr, uint cbMidiOutHdr);
 
     /// <summary>
     /// Gets the error text for a return code related to an output device.
@@ -386,7 +385,7 @@ public static class Win32Midi {
         UInt32 cbMidiOutCaps);
 
     [DllImport("winmm.dll", SetLastError = true)]
-    private static extern MMRESULT midiOutOpen(out HMIDIOUT lphmo, UIntPtr uDeviceID,
+    public static extern MMRESULT midiOutOpen(out HMIDIOUT lphmo, UIntPtr uDeviceID,
         MidiOutProc dwCallback, UIntPtr dwCallbackInstance, MidiOpenFlags dwFlags);
 
     [DllImport("winmm.dll", SetLastError = true)]

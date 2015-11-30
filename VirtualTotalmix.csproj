@@ -44,6 +44,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MidiOutput.cs" />
     <Compile Include="MidiInput.cs" />
     <Compile Include="MidiProtocol.cs" />
     <Compile Include="Program.cs" />

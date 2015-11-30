@@ -10,6 +10,9 @@ namespace VirtualTotalmix {
     static class Program {
         private static readonly VirtualMidiPort[] Ports = new VirtualMidiPort[4];
 
+        private static MidiInputDevice Input;
+        private static MidiOutputDevice Output;
+
         /// <summary>
         /// The main entry point for the application.
         /// </summary>
@@ -20,25 +23,20 @@ namespace VirtualTotalmix {
 
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
 
-            var numInputDevices = Win32Midi.midiInGetNumDevs();
-            Console.WriteLine("{0} midi input devices available:", numInputDevices);
-            for (uint i = 0; i < numInputDevices; i++) {
-                Win32Midi.MIDIINCAPS caps;
-                Win32Midi.midiInGetDevCaps(new UIntPtr(i), out caps);
-                Console.WriteLine(caps.szPname);
-            }
-            Console.WriteLine();
-
             for (var i = 0; i < Ports.Length; i++) {
                 Ports[i] = new VirtualMidiPort("Virtual TotalMix Channel " + i, false);
                 Ports[i].OnData += Vm_OnData;
             }
             Console.WriteLine("Virtual TotalMix device active");
 
-            using (var input = new MidiInputDevice(0))
+            var deviceName = "nanokontrol2";
+
+            using (Input  = MidiInputDevice.OpenByName(deviceName))
+            using (Output = MidiOutputDevice.OpenByName(deviceName))
             try {
-                Console.WriteLine("Opened midi input device #0");
-                input.OnData += Input_OnData;
+                Console.WriteLine("Opened midi input device {0}", Input.Name);
+                Console.WriteLine("Opened midi output device {0}", Output.Name);
+                Input.OnData += Input_OnData;
 
                 Application.Run();
             } finally {
@@ -47,9 +45,35 @@ namespace VirtualTotalmix {
             }
         }
 
+        /*
+        private static async void Animate () {
+            await Task.Delay(500);
+
+            const int min = 32;
+            const int max = 71;
+            const int c = (max - min) + 1;
+
+            int i = 0;
+            while (true) {
+                var prev = min + ((i - 2) % c);
+                var curr = min + (i % c);
+
+                Output.WriteShort(MidiStatusByte.ControlChange, (byte)prev, 0x00);
+                Output.WriteShort(MidiStatusByte.ControlChange, (byte)curr, 0x7F);
+
+                i += 1;
+
+                await Task.Delay(40);
+            }
+        }
+        */
+
         private static void Input_OnData (object sender, byte[] e) {
+            var bytes = new ArraySegment<byte>(e);
+            ArraySegment<byte> extraBytes;
+
             MidiMessage msg;
-            if (MidiProtocol.TryParseMessage(new ArraySegment<byte>(e), out msg)) {
+            if (MidiProtocol.TryParseMessage(bytes, out msg, out extraBytes)) {
                 Console.WriteLine("Input {0}", msg);
                 return;
             }
@@ -61,8 +85,18 @@ namespace VirtualTotalmix {
         }
 
         private static void Vm_OnData (object sender, byte[] e) {
+            var bytes = new ArraySegment<byte>(e);
+            ArraySegment<byte> extraBytes;
+
             var portIndex = Array.IndexOf(Ports, sender);
-            Console.Write("Port #{0} {{");
+
+            MidiMessage msg;
+            if (MidiProtocol.TryParseMessage(bytes, out msg, out extraBytes)) {
+                Console.WriteLine("Port #{0} {1}", portIndex, msg);
+                return;
+            }
+
+            Console.Write("Port #{0} {{", portIndex);
             foreach (var b in e)
                 Console.Write("{0:X2}", b);
             Console.WriteLine("}");
