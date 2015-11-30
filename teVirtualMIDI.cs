@@ -23,7 +23,7 @@ using System.Threading;
 namespace teVirtualMIDI {
 
 	[Serializable()]
-	public class TeVirtualMIDIException : System.Exception {
+	public class TeVirtualMidiException : System.Exception {
 
 		/* defines of specific WIN32-error-codes that the native teVirtualMIDI-driver
 		 * is using to communicate specific problems to the application */
@@ -39,16 +39,16 @@ namespace teVirtualMIDI {
 		private const int ERROR_REVISION_MISMATCH = 1306;
 		private const int ERROR_ALIAS_EXISTS      = 1379;
 
-		public TeVirtualMIDIException() : base() {
+		public TeVirtualMidiException() : base() {
 		}
 		
-		public TeVirtualMIDIException(string message) : base(message) {
+		public TeVirtualMidiException(string message) : base(message) {
 		}
 
-		public TeVirtualMIDIException(string message, System.Exception inner) : base(message, inner) {
+		public TeVirtualMidiException(string message, System.Exception inner) : base(message, inner) {
 		}
 
-		protected TeVirtualMIDIException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext context) {
+		protected TeVirtualMidiException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext context) {
 		}
 
 		public int reasonCode {
@@ -111,13 +111,13 @@ namespace teVirtualMIDI {
 		}
 
 		public static void ThrowExceptionForReasonCode( int reasonCode ) {
-			TeVirtualMIDIException exception = new TeVirtualMIDIException( reasonCodeToString( reasonCode ) );
+			TeVirtualMidiException exception = new TeVirtualMidiException( reasonCodeToString( reasonCode ) );
 			exception.reasonCode = reasonCode;
 			throw exception;
 		}
 	}
 
-	public class TeVirtualMIDI : IDisposable {
+	public class VirtualMidiPort : IDisposable {
         /* Callback interface.  This callback is called by the driver/interface-dll for a packet of MIDI-data that is received from the driver
          * by the application using the virtual MIDI-port.
          *
@@ -172,22 +172,27 @@ namespace teVirtualMIDI {
 
         public event EventHandler<byte[]> OnData;
 
+        private readonly SynchronizationContext SynchronizationContext;
         private MidiDataCallback CallbackDelegate;
 
 
 		/* static initializer to retrieve version-info from DLL... */
-		static TeVirtualMIDI() {
+		static VirtualMidiPort () {
 			VersionString = Marshal.PtrToStringAuto( virtualMIDIGetVersion(ref MajorVersion, ref MinorVersion, ref ReleaseNumber, ref BuildNumber ) );
 			DriverVersionString = Marshal.PtrToStringAuto( virtualMIDIGetDriverVersion(ref DriverMajorVersion, ref DriverMinorVersion, ref DriverReleaseNumber, ref DriverBuildNumber ) );
 		}
 
 
-		public TeVirtualMIDI ( string portName, bool blockingMode, UInt32 maxSysexLength = TE_VM_DEFAULT_SYSEX_SIZE, UInt32 flags = TE_VM_FLAGS_PARSE_RX ) {
-			fInstance = virtualMIDICreatePortEx2(portName, MakeCallback(blockingMode), IntPtr.Zero, maxSysexLength, flags );
+		public VirtualMidiPort (string portName, bool blockingMode, UInt32 maxSysexLength = TE_VM_DEFAULT_SYSEX_SIZE, UInt32 flags = TE_VM_FLAGS_PARSE_RX) {
+            SynchronizationContext = SynchronizationContext.Current;
+            if (SynchronizationContext == null)
+                throw new InvalidOperationException("No synchronization context");
+
+            fInstance = virtualMIDICreatePortEx2(portName, MakeCallback(blockingMode), IntPtr.Zero, maxSysexLength, flags );
 
 			if (fInstance == IntPtr.Zero) {
 				int lastError = Marshal.GetLastWin32Error();
-				TeVirtualMIDIException.ThrowExceptionForReasonCode( lastError );
+				TeVirtualMidiException.ThrowExceptionForReasonCode( lastError );
 			}
 
 			fReadBuffer = new byte[maxSysexLength];
@@ -195,12 +200,16 @@ namespace teVirtualMIDI {
             fMaxSysexLength = maxSysexLength;
 		}
 
-		public TeVirtualMIDI( string portName, bool blockingMode, UInt32 maxSysexLength, UInt32 flags, ref Guid manufacturer, ref Guid product) {
+		public VirtualMidiPort (string portName, bool blockingMode, UInt32 maxSysexLength, UInt32 flags, ref Guid manufacturer, ref Guid product) {
+            SynchronizationContext = SynchronizationContext.Current;
+            if (SynchronizationContext == null)
+                throw new InvalidOperationException("No synchronization context");
+
 			fInstance = virtualMIDICreatePortEx3(portName, MakeCallback(blockingMode), IntPtr.Zero, maxSysexLength, flags, ref manufacturer, ref product );
 
 			if (fInstance == IntPtr.Zero) {
 				int lastError = Marshal.GetLastWin32Error();
-				TeVirtualMIDIException.ThrowExceptionForReasonCode( lastError );
+				TeVirtualMidiException.ThrowExceptionForReasonCode( lastError );
 			}
 
 			fReadBuffer = new byte[maxSysexLength];
@@ -209,13 +218,14 @@ namespace teVirtualMIDI {
 		}
 
         private void _InvokeEventHandler (object state) {
-            OnData(this, (byte[])state);
+            if (OnData != null)
+                OnData(this, (byte[])state);
         }
 
         private unsafe void _MidiCallback (IntPtr midiPort, byte* pData, uint dataLength, IntPtr userData) {
             var data = new byte[dataLength];
             Marshal.Copy((IntPtr)pData, data, 0, (int)dataLength);
-            SynchronizationContext.Current.Post(_InvokeEventHandler, data);
+            SynchronizationContext.Post(_InvokeEventHandler, data);
         }
 
         private unsafe IntPtr MakeCallback (bool blockingMode) {
@@ -227,7 +237,7 @@ namespace teVirtualMIDI {
         }
 
 
-		~TeVirtualMIDI() {
+		~VirtualMidiPort() {
             Dispose(true);
 		}
 
@@ -244,7 +254,7 @@ namespace teVirtualMIDI {
 			    if ( !virtualMIDIShutdown( fInstance ) ) {
                     if (!finalizing) {
 				        int lastError = Marshal.GetLastWin32Error();
-				        TeVirtualMIDIException.ThrowExceptionForReasonCode(lastError);
+				        TeVirtualMidiException.ThrowExceptionForReasonCode(lastError);
                     }
 			    }
 
@@ -263,7 +273,7 @@ namespace teVirtualMIDI {
 
 			if ( !virtualMIDISendData( fInstance, command, (UInt32)command.Length ) ) {
 				int lastError = Marshal.GetLastWin32Error();
-				TeVirtualMIDIException.ThrowExceptionForReasonCode(lastError);
+				TeVirtualMidiException.ThrowExceptionForReasonCode(lastError);
 			}
 		}
 
@@ -272,7 +282,7 @@ namespace teVirtualMIDI {
 			UInt32 length = fMaxSysexLength;
 			if ( !virtualMIDIGetData( fInstance, fReadBuffer, ref length ) ) {
 				int lastError = Marshal.GetLastWin32Error();
-				TeVirtualMIDIException.ThrowExceptionForReasonCode(lastError);
+				TeVirtualMidiException.ThrowExceptionForReasonCode(lastError);
 			}
 
 			byte[] outBytes = new byte[length];
@@ -281,13 +291,13 @@ namespace teVirtualMIDI {
 			return outBytes;
 		}
 
-		public UInt64[] getProcessIds( ) {
+		public UInt64[] GetProcessIds() {
             UInt32 length = 17 * sizeof(ulong);
             UInt32 count;
 
             if ( !virtualMIDIGetProcesses( fInstance, fReadProcessIds, ref length ) ) {
 				int lastError = Marshal.GetLastWin32Error();
-				TeVirtualMIDIException.ThrowExceptionForReasonCode(lastError);
+				TeVirtualMidiException.ThrowExceptionForReasonCode(lastError);
 			}
 
             count = length / sizeof(ulong);
