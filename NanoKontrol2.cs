@@ -30,8 +30,38 @@ namespace VirtualTotalmix {
     }
 
     public class NanoKontrol2 : IDisposable {
+        public const int TrackCount = 8;
+
         public const int FirstSlider = 0x00;
-        public const int SliderCount = 8;
+        public const int FirstKnob = 0x10;
+        public const int FirstButton = FirstSolo;
+        public const int FirstSolo = 0x20;
+        public const int FirstMute = 0x30;
+        public const int FirstRecord = 0x40;
+        public const int LastButton = FirstRecord + TrackCount - 1;
+
+        public enum ButtonCategory {
+            Solo,
+            Mute,
+            Record,
+            Track,
+            Marker,
+            Shuttle
+        }
+
+        public struct ButtonEventArgs {
+            public readonly ButtonCategory Category;
+            public readonly int  Index;
+            public readonly bool PreviousValue;
+            public readonly bool NewValue;
+
+            public ButtonEventArgs (ButtonCategory category, int index, bool previousValue, bool newValue) {
+                Category = category;
+                Index = index;
+                PreviousValue = previousValue;
+                NewValue = newValue;
+            }
+        }
 
         public struct ControlEventArgs {
             public readonly int Index;
@@ -45,11 +75,33 @@ namespace VirtualTotalmix {
             }
         }
 
-        public class SliderState {
-            private readonly MidiValue[] Values;
+        public class ButtonStateCollection {
+            public readonly ButtonCategory Category;
+            private readonly bool[] Values;
 
-            internal SliderState (MidiValue[] values) {
+            internal ButtonStateCollection (ButtonCategory category, bool[] values) {
                 Values = values;
+                Category = category;
+            }
+
+            public bool this[int index] {
+                get {
+                    return Values[index];
+                }
+            }
+
+            public override string ToString () {
+                return Category.ToString();
+            }
+        }
+
+        public class ControlStateCollection {
+            private readonly MidiValue[] Values;
+            private readonly string Name;
+
+            internal ControlStateCollection (string name, MidiValue[] values) {
+                Values = values;
+                Name = name;
             }
 
             public MidiValue this[int index] {
@@ -59,20 +111,31 @@ namespace VirtualTotalmix {
             }
 
             public override string ToString () {
-                return "Sliders";
+                return Name;
             }
         }
 
-        public event EventHandler<ControlEventArgs> OnChanged;
+        public event EventHandler<ControlEventArgs> OnControlChanged;
+        public event EventHandler<ButtonEventArgs>  OnButtonChanged;
 
         public readonly MidiInputDevice  Input;
         public readonly MidiOutputDevice Output;
 
-        private readonly MidiValue[] _Sliders = new MidiValue[SliderCount];
-        public readonly SliderState Sliders;
+        private readonly MidiValue[] _Slider = new MidiValue[TrackCount];
+        private readonly MidiValue[] _Knob = new MidiValue[TrackCount];
+        private readonly bool[] _Solo = new bool[TrackCount];
+        private readonly bool[] _Mute = new bool[TrackCount];
+        private readonly bool[] _Record = new bool[TrackCount];
+
+        public readonly ControlStateCollection Slider, Knob;
+        public readonly ButtonStateCollection Solo, Mute, Record;
 
         public NanoKontrol2 (string midiDeviceName = "nanoKONTROL2") {
-            Sliders = new SliderState(_Sliders);
+            Slider = new ControlStateCollection("Slider", _Slider);
+            Knob = new ControlStateCollection("Knob", _Knob);
+            Solo = new ButtonStateCollection(ButtonCategory.Solo, _Solo);
+            Mute = new ButtonStateCollection(ButtonCategory.Mute, _Mute);
+            Record = new ButtonStateCollection(ButtonCategory.Record, _Record);
 
             Input = MidiInputDevice.OpenByName(midiDeviceName);
             Output = MidiOutputDevice.OpenByName(midiDeviceName);
@@ -80,13 +143,21 @@ namespace VirtualTotalmix {
             Input.OnData += Input_OnData;
         }
 
-        private void ChangeValue<T>(T sender, MidiValue[] values, int index, byte newValue) {
+        private void ChangeValue(ControlStateCollection sender, MidiValue[] values, int index, byte newValue) {
             var oldValue = values[index];
             var _newValue = new MidiValue(newValue);
             values[index] = _newValue;
 
-            if (OnChanged != null)
-                OnChanged(sender, new ControlEventArgs(index, oldValue, _newValue));
+            if (OnControlChanged != null)
+                OnControlChanged(sender, new ControlEventArgs(index, oldValue, _newValue));
+        }
+
+        private void ChangeButtonState(ButtonStateCollection sender, bool[] values, int index, bool newValue) {
+            var oldValue = values[index];
+            values[index] = newValue;
+
+            if (OnButtonChanged != null)
+                OnButtonChanged(sender, new ButtonEventArgs(sender.Category, index, oldValue, newValue));
         }
 
         private bool HandleMessage (ref MidiMessage msg) {
@@ -97,10 +168,30 @@ namespace VirtualTotalmix {
             var channel = data.Channel;
 
             var sliderIndex = data.Data1 - FirstSlider;
+            var knobIndex   = data.Data1 - FirstKnob;
+            var buttonIndex = data.Data1 - FirstButton;
 
-            if ((sliderIndex >= 0) && (sliderIndex < SliderCount))
-                ChangeValue(Sliders, _Sliders, sliderIndex, data.Data2);
-            else
+            if ((sliderIndex >= 0) && (sliderIndex < TrackCount))
+                ChangeValue(Slider, _Slider, sliderIndex, data.Data2);
+            else if ((knobIndex >= 0) && (knobIndex < TrackCount))
+                ChangeValue(Knob, _Knob, knobIndex, data.Data2);
+            else if ((buttonIndex >= 0) && (buttonIndex <= LastButton)) {
+                ButtonStateCollection bsc;
+                bool[] bs;
+
+                if (data.Data1 >= FirstRecord) {
+                    bsc = Record;
+                    bs = _Record;
+                } else if (data.Data1 >= FirstMute) {
+                    bsc = Mute;
+                    bs = _Mute;
+                } else {
+                    bsc = Solo;
+                    bs = _Solo;
+                }
+
+                ChangeButtonState(bsc, bs, buttonIndex % TrackCount, data.Data2 == 0x7F); 
+            } else
                 return false;
 
             return true;

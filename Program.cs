@@ -31,13 +31,18 @@ namespace VirtualTotalmix {
 
             using (var nk2 = new NanoKontrol2())
             try {
-                nk2.OnChanged += Nk2_OnChanged;
+                nk2.OnControlChanged += Nk2_OnChanged;
+                nk2.OnButtonChanged += Nk2_OnButtonChanged;
 
                 Application.Run();
             } finally {
                 foreach (var port in Ports)
                     port.Dispose();
             }
+        }
+
+        private static void Nk2_OnButtonChanged (object sender, NanoKontrol2.ButtonEventArgs e) {
+            Console.WriteLine("NK2 {0}[{1}] {2}", sender, e.Index, e.NewValue ? "+" : "-");
         }
 
         private static void Nk2_OnChanged (object sender, NanoKontrol2.ControlEventArgs e) {
