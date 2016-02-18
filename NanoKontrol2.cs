@@ -29,6 +29,64 @@ namespace VirtualTotalmix {
         }
     }
 
+    public class LEDCollection {
+        private readonly NanoKontrol2 Parent;
+        public readonly NanoKontrol2.ButtonCategory Category;
+
+        public LEDCollection (NanoKontrol2 parent, NanoKontrol2.ButtonCategory category) {
+            Parent = parent;
+            Category = category;
+        }
+
+        public bool this[int index] {
+            set {
+                Parent.ChangeButtonLED(Category, index, value);
+            }
+        }
+    }
+
+    public class ButtonStateCollection {
+        public readonly NanoKontrol2.ButtonCategory Category;
+        public readonly LEDCollection LEDs;
+        private readonly bool[] Values;
+
+        internal ButtonStateCollection (NanoKontrol2 parent, NanoKontrol2.ButtonCategory category, bool[] values) {
+            LEDs = new LEDCollection(parent, category);
+            Values = values;
+            Category = category;
+        }
+
+        public bool this[int index] {
+            get {
+                return Values[index];
+            }
+        }
+
+        public override string ToString () {
+            return Category.ToString();
+        }
+    }
+
+    public class ControlStateCollection {
+        private readonly MidiValue[] Values;
+        private readonly string Name;
+
+        internal ControlStateCollection (string name, MidiValue[] values) {
+            Values = values;
+            Name = name;
+        }
+
+        public MidiValue this[int index] {
+            get {
+                return new MidiValue(Values[index]);
+            }
+        }
+
+        public override string ToString () {
+            return Name;
+        }
+    }
+
     public class NanoKontrol2 : IDisposable {
         public const int TrackCount = 8;
 
@@ -41,9 +99,9 @@ namespace VirtualTotalmix {
         public const int LastButton = FirstRecord + TrackCount - 1;
 
         public enum ButtonCategory {
-            Solo,
-            Mute,
-            Record,
+            Solo = FirstSolo,
+            Mute = FirstMute,
+            Record = FirstRecord,
             Track,
             Marker,
             Shuttle
@@ -75,48 +133,8 @@ namespace VirtualTotalmix {
             }
         }
 
-        public class ButtonStateCollection {
-            public readonly ButtonCategory Category;
-            private readonly bool[] Values;
-
-            internal ButtonStateCollection (ButtonCategory category, bool[] values) {
-                Values = values;
-                Category = category;
-            }
-
-            public bool this[int index] {
-                get {
-                    return Values[index];
-                }
-            }
-
-            public override string ToString () {
-                return Category.ToString();
-            }
-        }
-
-        public class ControlStateCollection {
-            private readonly MidiValue[] Values;
-            private readonly string Name;
-
-            internal ControlStateCollection (string name, MidiValue[] values) {
-                Values = values;
-                Name = name;
-            }
-
-            public MidiValue this[int index] {
-                get {
-                    return new MidiValue(Values[index]);
-                }
-            }
-
-            public override string ToString () {
-                return Name;
-            }
-        }
-
-        public event EventHandler<ControlEventArgs> OnControlChanged;
-        public event EventHandler<ButtonEventArgs>  OnButtonChanged;
+        public event Action<ControlStateCollection, ControlEventArgs> OnControlChanged;
+        public event Action<ButtonStateCollection, ButtonEventArgs>   OnButtonChanged;
 
         public readonly MidiInputDevice  Input;
         public readonly MidiOutputDevice Output;
@@ -133,9 +151,9 @@ namespace VirtualTotalmix {
         public NanoKontrol2 (string midiDeviceName = "nanoKONTROL2") {
             Slider = new ControlStateCollection("Slider", _Slider);
             Knob = new ControlStateCollection("Knob", _Knob);
-            Solo = new ButtonStateCollection(ButtonCategory.Solo, _Solo);
-            Mute = new ButtonStateCollection(ButtonCategory.Mute, _Mute);
-            Record = new ButtonStateCollection(ButtonCategory.Record, _Record);
+            Solo = new ButtonStateCollection(this, ButtonCategory.Solo, _Solo);
+            Mute = new ButtonStateCollection(this, ButtonCategory.Mute, _Mute);
+            Record = new ButtonStateCollection(this, ButtonCategory.Record, _Record);
 
             Input = MidiInputDevice.OpenByName(midiDeviceName);
             Output = MidiOutputDevice.OpenByName(midiDeviceName);
@@ -143,7 +161,7 @@ namespace VirtualTotalmix {
             Input.OnData += Input_OnData;
         }
 
-        private void ChangeValue(ControlStateCollection sender, MidiValue[] values, int index, byte newValue) {
+        private void ChangeValue (ControlStateCollection sender, MidiValue[] values, int index, byte newValue) {
             var oldValue = values[index];
             var _newValue = new MidiValue(newValue);
             values[index] = _newValue;
@@ -152,7 +170,7 @@ namespace VirtualTotalmix {
                 OnControlChanged(sender, new ControlEventArgs(index, oldValue, _newValue));
         }
 
-        private void ChangeButtonState(ButtonStateCollection sender, bool[] values, int index, bool newValue) {
+        private void ChangeButtonState (ButtonStateCollection sender, bool[] values, int index, bool newValue) {
             var oldValue = values[index];
             values[index] = newValue;
 
@@ -208,6 +226,11 @@ namespace VirtualTotalmix {
                 if (!HandleMessage(ref msg))
                     Console.WriteLine("NK2> {0}", msg);
             }
+        }
+
+        public void ChangeButtonLED (ButtonCategory category, int index, bool state) {
+            var selector = (byte)(category + index);
+            Output.WriteShort(MidiStatusByte.ControlChange, selector, (byte)(state ? 0x7F : 0x00));
         }
 
         public void Dispose () {

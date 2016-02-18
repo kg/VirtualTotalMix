@@ -13,6 +13,8 @@ namespace VirtualTotalmix {
         private static MidiInputDevice Input;
         private static MidiOutputDevice Output;
 
+        private static NanoKontrol2 NK2;
+
         /// <summary>
         /// The main entry point for the application.
         /// </summary>
@@ -29,7 +31,7 @@ namespace VirtualTotalmix {
             }
             Console.WriteLine("Virtual TotalMix device active");
 
-            using (var nk2 = new NanoKontrol2())
+            using (var nk2 = NK2 = new NanoKontrol2())
             try {
                 nk2.OnControlChanged += Nk2_OnChanged;
                 nk2.OnButtonChanged += Nk2_OnButtonChanged;
@@ -41,11 +43,12 @@ namespace VirtualTotalmix {
             }
         }
 
-        private static void Nk2_OnButtonChanged (object sender, NanoKontrol2.ButtonEventArgs e) {
-            Console.WriteLine("NK2 {0}[{1}] {2}", sender, e.Index, e.NewValue ? "+" : "-");
+        private static void Nk2_OnButtonChanged (ButtonStateCollection sender, NanoKontrol2.ButtonEventArgs e) {
+            Console.WriteLine("NK2 {0}[{1}] {2}", sender, e.Index, e.NewValue ? "+" : "-");            
+            sender.LEDs[e.Index] = e.NewValue;
         }
 
-        private static void Nk2_OnChanged (object sender, NanoKontrol2.ControlEventArgs e) {
+        private static void Nk2_OnChanged (ControlStateCollection sender, NanoKontrol2.ControlEventArgs e) {
             Console.WriteLine("NK2 {0}[{1}] = {2}", sender, e.Index, e.NewValue);
         }
 
